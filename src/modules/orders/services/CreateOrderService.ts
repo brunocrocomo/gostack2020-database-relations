@@ -35,12 +35,14 @@ class CreateOrderService {
       throw new AppError('There is no customer with the provided id.');
     }
 
-    const orderProducts = await this.productsRepository.findAllById(products);
+    const requestedProducts = await this.productsRepository.findAllById(
+      products,
+    );
 
-    const orderProductsId = orderProducts.map(product => product.id);
+    const requestedProductsId = requestedProducts.map(product => product.id);
 
     const invalidProducts = products.filter(
-      product => !orderProductsId.includes(product.id),
+      product => !requestedProductsId.includes(product.id),
     );
 
     if (invalidProducts.length) {
@@ -51,7 +53,7 @@ class CreateOrderService {
 
     const productsWithNoAvailableQuantity = products.filter(
       product =>
-        orderProducts.filter(p => p.id === product.id)[0].quantity <
+        requestedProducts.filter(p => p.id === product.id)[0].quantity <
         product.quantity,
     );
 
@@ -64,13 +66,24 @@ class CreateOrderService {
     const serializedProducts = products.map(product => ({
       product_id: product.id,
       quantity: product.quantity,
-      price: orderProducts.filter(p => p.id === product.id)[0].price,
+      price: requestedProducts.filter(p => p.id === product.id)[0].price,
     }));
 
     const order = await this.ordersRepository.create({
       customer,
       products: serializedProducts,
     });
+
+    const { order_products } = order;
+
+    const orderedProductsQuantity = order_products.map(product => ({
+      id: product.product_id,
+      quantity:
+        requestedProducts.filter(p => p.id === product.product_id)[0].quantity -
+        product.quantity,
+    }));
+
+    await this.productsRepository.updateQuantity(orderedProductsQuantity);
 
     return order;
   }
